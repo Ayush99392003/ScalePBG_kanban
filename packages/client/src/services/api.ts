@@ -44,6 +44,17 @@ function isNetworkError(err: unknown): boolean {
   return false;
 }
 
+/** Removes undefined fields from an object so Firestore setDoc/updateDoc never throws Unsupported field value: undefined */
+function cleanForFirestore<T extends Record<string, any>>(obj: T): T {
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = val;
+    }
+  }
+  return clean as T;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const syncProfile = async (): Promise<ApiResponse<{ user: User; orgs: Organization[] }>> => {
@@ -68,7 +79,7 @@ export const syncProfile = async (): Promise<ApiResponse<{ user: User; orgs: Org
       updatedAt: now,
     };
 
-    await setDoc(doc(db, 'users', fbUser.uid), userObj, { merge: true });
+    await setDoc(doc(db, 'users', fbUser.uid), cleanForFirestore(userObj), { merge: true });
 
     const orgsSnap = await getDocs(collection(db, 'organizations'));
     const userOrgs: Organization[] = [];
@@ -129,16 +140,16 @@ export const createOrg = async (data: { name: string; slug: string }): Promise<A
       ownerId: fbUser.uid,
       createdAt: now,
     };
-    await setDoc(orgRef, newOrg);
+    await setDoc(orgRef, cleanForFirestore(newOrg));
 
     // Add owner as admin member
     const memberRef = doc(db, 'organizations', orgRef.id, 'members', fbUser.uid);
-    await setDoc(memberRef, {
+    await setDoc(memberRef, cleanForFirestore({
       uid: fbUser.uid,
       role: 'admin',
       capacityHoursPerWeek: 40,
       joinedAt: now,
-    });
+    }));
 
     return { success: true, data: newOrg };
   }
@@ -228,7 +239,7 @@ export const createAccessRequest = async (orgId: string): Promise<ApiResponse<Ac
       status: 'pending',
       requestedAt: now,
     };
-    await setDoc(reqRef, requestObj);
+    await setDoc(reqRef, cleanForFirestore(requestObj));
     return { success: true, data: requestObj };
   }
 
@@ -289,7 +300,7 @@ export const createProject = async (orgId: string, data: { name: string; key: st
     description: data.description,
     createdAt: now,
   };
-  await setDoc(pRef, newProj);
+  await setDoc(pRef, cleanForFirestore(newProj));
   return { success: true, data: newProj };
 };
 
@@ -381,7 +392,7 @@ export const createEpic = async (projectId: string, data: { title: string; goal?
     status: 'open',
     createdAt: now,
   };
-  await setDoc(eRef, newEpic);
+  await setDoc(eRef, cleanForFirestore(newEpic));
   return { success: true, data: newEpic };
 };
 
@@ -440,7 +451,7 @@ export const createStory = async (data: {
     priority: (data.priority as Task['priority']) ?? 'medium',
     createdAt: now,
   };
-  await setDoc(sRef, newStory);
+  await setDoc(sRef, cleanForFirestore(newStory));
   return { success: true, data: newStory };
 };
 
@@ -502,7 +513,7 @@ export const createSprint = async (projectId: string, data: { name: string; goal
     status: 'planning',
     createdAt: now,
   };
-  await setDoc(spRef, newSprint);
+  await setDoc(spRef, cleanForFirestore(newSprint));
   return { success: true, data: newSprint };
 };
 
@@ -557,7 +568,7 @@ export const createTask = async (data: {
     createdAt: now,
     updatedAt: now,
   };
-  await setDoc(tRef, newTask);
+  await setDoc(tRef, cleanForFirestore(newTask));
   return { success: true, data: newTask };
 };
 
@@ -580,7 +591,7 @@ export const updateTask = async (taskId: string, data: Partial<Task> & { version
   const taskRef = doc(db, 'tasks', taskId);
   const now = new Date().toISOString();
   const updates = { ...data, version: data.version + 1, updatedAt: now };
-  await updateDoc(taskRef, updates);
+  await updateDoc(taskRef, cleanForFirestore(updates));
   const snap = await getDoc(taskRef);
   return { success: true, data: { id: snap.id, ...snap.data() } as Task };
 };

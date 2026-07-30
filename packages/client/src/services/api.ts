@@ -1,6 +1,6 @@
 import axios from 'axios';
 import {
-  doc, getDoc, setDoc, getDocs, collection, query, where, addDoc, updateDoc,
+  doc, getDoc, setDoc, getDocs, collection, query, where, addDoc, updateDoc, deleteDoc,
 } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import type {
@@ -227,11 +227,50 @@ export const getOrgMembers = async (orgId: string): Promise<ApiResponse<OrgMembe
   return { success: true, data: members };
 };
 
-export const updateMemberRole = (orgId: string, uid: string, role: string): Promise<ApiResponse<void>> =>
-  apiClient.patch(`/orgs/${orgId}/members/${uid}`, { role }).then((r) => r.data);
+export const updateMemberRole = async (orgId: string, uid: string, role: string): Promise<ApiResponse<void>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.patch(`/orgs/${orgId}/members/${uid}`, { role });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
 
-export const getAccessRequests = (orgId: string, status?: string): Promise<ApiResponse<AccessRequest[]>> =>
-  apiClient.get(`/orgs/${orgId}/access-requests`, { params: { status } }).then((r) => r.data);
+  const memberRef = doc(db, 'organizations', orgId, 'members', uid);
+  await updateDoc(memberRef, { role });
+  return { success: true, data: undefined };
+};
+
+export const getAccessRequests = async (orgId: string, status?: string): Promise<ApiResponse<AccessRequest[]>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get(`/orgs/${orgId}/access-requests`, { params: { status } });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const constraints: any[] = [where('orgId', '==', orgId)];
+  if (status) constraints.push(where('status', '==', status));
+
+  const q = query(collection(db, 'access_requests'), ...constraints);
+  const snap = await getDocs(q);
+  const requests: AccessRequest[] = snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      orgId: data.orgId,
+      userId: data.userId,
+      userEmail: data.userEmail ?? '',
+      userName: data.userName ?? 'User',
+      status: data.status ?? 'pending',
+      requestedAt: data.requestedAt ?? new Date().toISOString(),
+    };
+  });
+  return { success: true, data: requests };
+};
 
 // ── Access Requests ───────────────────────────────────────────────────────────
 
@@ -268,8 +307,33 @@ export const createAccessRequest = async (orgId: string): Promise<ApiResponse<Ac
 export const getMyAccessRequests = (): Promise<ApiResponse<AccessRequest[]>> =>
   apiClient.get('/access-requests/my').then((r) => r.data);
 
-export const reviewAccessRequest = (requestId: string, status: 'approved' | 'rejected'): Promise<ApiResponse<AccessRequest>> =>
-  apiClient.patch(`/access-requests/${requestId}`, { status }).then((r) => r.data);
+export const reviewAccessRequest = async (requestId: string, status: 'approved' | 'rejected'): Promise<ApiResponse<AccessRequest>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.patch(`/access-requests/${requestId}`, { status });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const reqRef = doc(db, 'access_requests', requestId);
+  await updateDoc(reqRef, { status });
+  const snap = await getDoc(reqRef);
+  const reqData = snap.data() as AccessRequest;
+
+  if (status === 'approved' && reqData) {
+    const memRef = doc(db, 'organizations', reqData.orgId, 'members', reqData.userId);
+    await setDoc(memRef, cleanForFirestore({
+      uid: reqData.userId,
+      role: 'member',
+      capacityHoursPerWeek: 40,
+      joinedAt: new Date().toISOString(),
+    }), { merge: true });
+  }
+
+  return { success: true, data: reqData ? { ...reqData, id: snap.id } : ({} as AccessRequest) };
+};
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
@@ -542,14 +606,89 @@ export const getSprint = (sprintId: string): Promise<ApiResponse<Sprint>> =>
 export const updateSprintStatus = (sprintId: string, status: string): Promise<ApiResponse<Sprint>> =>
   apiClient.patch(`/sprints/${sprintId}/status`, { status }).then((r) => r.data);
 
-export const getSprintBoard = (sprintId: string): Promise<ApiResponse<{ items: SprintItem[]; tasks: Record<string, Task> }>> =>
-  apiClient.get(`/sprints/${sprintId}/board`).then((r) => r.data);
+export const getSprintBoard = async (sprintId: string): Promise<ApiResponse<{ items: SprintItem[]; tasks: Record<string, Task> }>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get(`/sprints/${sprintId}/board`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
 
-export const addItemsToSprint = (sprintId: string, taskIds: string[]): Promise<ApiResponse<SprintItem[]>> =>
-  apiClient.post(`/sprints/${sprintId}/items`, { taskIds }).then((r) => r.data);
+  const q = query(collection(db, 'sprint_items'), where('sprintId', '==', sprintId));
+  const snap = await getDocs(q);
+  const items: SprintItem[] = snap.docs.map((d, idx) => ({
+    id: d.id,
+    sprintId: d.data().sprintId,
+    taskId: d.data().taskId,
+    status: d.data().status ?? 'todo',
+    orderIndex: d.data().orderIndex ?? idx,
+  }));
 
-export const removeSprintItem = (sprintId: string, taskId: string): Promise<ApiResponse<{ removed: boolean }>> =>
-  apiClient.delete(`/sprints/${sprintId}/items/${taskId}`).then((r) => r.data);
+  const tasksMap: Record<string, Task> = {};
+  for (const item of items) {
+    const taskDoc = await getDoc(doc(db, 'tasks', item.taskId));
+    if (taskDoc.exists()) {
+      tasksMap[item.taskId] = { id: taskDoc.id, ...taskDoc.data() } as Task;
+    }
+  }
+
+  return { success: true, data: { items, tasks: tasksMap } };
+};
+
+export const addItemsToSprint = async (sprintId: string, taskIds: string[]): Promise<ApiResponse<SprintItem[]>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.post(`/sprints/${sprintId}/items`, { taskIds });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const createdItems: SprintItem[] = [];
+  const now = new Date().toISOString();
+  for (let i = 0; i < taskIds.length; i++) {
+    const taskId = taskIds[i];
+    const itemRef = doc(collection(db, 'sprint_items'));
+    const itemObj: SprintItem = {
+      id: itemRef.id,
+      sprintId,
+      taskId,
+      status: 'todo',
+      orderIndex: i,
+    };
+    await setDoc(itemRef, cleanForFirestore(itemObj));
+    createdItems.push(itemObj);
+
+    const taskRef = doc(db, 'tasks', taskId);
+    const tSnap = await getDoc(taskRef);
+    if (tSnap.exists() && tSnap.data().status === 'backlog') {
+      await updateDoc(taskRef, { status: 'todo', updatedAt: now });
+    }
+  }
+
+  return { success: true, data: createdItems };
+};
+
+export const removeSprintItem = async (sprintId: string, taskId: string): Promise<ApiResponse<{ removed: boolean }>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.delete(`/sprints/${sprintId}/items/${taskId}`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const q = query(collection(db, 'sprint_items'), where('sprintId', '==', sprintId), where('taskId', '==', taskId));
+  const snap = await getDocs(q);
+  for (const d of snap.docs) {
+    await deleteDoc(doc(db, 'sprint_items', d.id));
+  }
+  return { success: true, data: { removed: true } };
+};
 
 export const getBurndown = (sprintId: string): Promise<ApiResponse<BurndownSnapshot[]>> =>
   apiClient.get(`/sprints/${sprintId}/burndown`).then((r) => r.data);
@@ -594,8 +733,42 @@ export const createTask = async (data: {
 export const getTask = (taskId: string): Promise<ApiResponse<Task & { subtasks: Subtask[]; comments: Comment[] }>> =>
   apiClient.get(`/tasks/${taskId}`).then((r) => r.data);
 
-export const getTasks = (projectId: string, filter?: { status?: string; assigneeId?: string }): Promise<ApiResponse<Task[]>> =>
-  apiClient.get('/tasks', { params: { projectId, ...filter } }).then((r) => r.data);
+export const getTasks = async (projectId: string, filter?: { status?: string; assigneeId?: string }): Promise<ApiResponse<Task[]>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get('/tasks', { params: { projectId, ...filter } });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const constraints: any[] = [where('projectId', '==', projectId)];
+  if (filter?.status) constraints.push(where('status', '==', filter.status));
+  if (filter?.assigneeId) constraints.push(where('assigneeId', '==', filter.assigneeId));
+
+  const q = query(collection(db, 'tasks'), ...constraints);
+  const snap = await getDocs(q);
+  const tasks: Task[] = snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      projectId: data.projectId,
+      storyId: data.storyId,
+      assigneeId: data.assigneeId,
+      title: data.title,
+      description: data.description,
+      estimateHours: data.estimateHours ?? 0,
+      priority: data.priority ?? 'medium',
+      status: data.status ?? 'backlog',
+      labelIds: data.labelIds ?? [],
+      version: data.version ?? 1,
+      createdAt: data.createdAt ?? new Date().toISOString(),
+      updatedAt: data.updatedAt ?? new Date().toISOString(),
+    };
+  });
+  return { success: true, data: tasks };
+};
 
 export const updateTask = async (taskId: string, data: Partial<Task> & { version: number }): Promise<ApiResponse<Task>> => {
   if (!shouldUseDirectFirestore()) {
@@ -615,8 +788,19 @@ export const updateTask = async (taskId: string, data: Partial<Task> & { version
   return { success: true, data: { id: snap.id, ...snap.data() } as Task };
 };
 
-export const deleteTask = (taskId: string): Promise<ApiResponse<void>> =>
-  apiClient.delete(`/tasks/${taskId}`).then((r) => r.data);
+export const deleteTask = async (taskId: string): Promise<ApiResponse<void>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.delete(`/tasks/${taskId}`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  await deleteDoc(doc(db, 'tasks', taskId));
+  return { success: true, data: undefined };
+};
 
 export const addComment = (taskId: string, body: string): Promise<ApiResponse<Comment>> =>
   apiClient.post(`/tasks/${taskId}/comments`, { body }).then((r) => r.data);

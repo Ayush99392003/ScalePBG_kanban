@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Avatar } from '../common/Avatar';
 import { PriorityBadge, StatusBadge } from '../common/Badge';
-import { Task, Subtask, Comment, OrgMember } from '../../types';
+import { Task, Subtask, Comment, OrgMember, Epic, Story } from '../../types';
 import {
   getTask, addComment, addSubtask, toggleSubtask, updateTask,
+  getEpics, getStories,
 } from '../../services/api';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useBoardStore } from '../../store/useBoardStore';
 import {
   Clock, MessageSquare, CheckSquare, Send, Plus, Check,
-  User, Flag,
+  User, Flag, Zap, BookOpen,
 } from 'lucide-react';
 
 interface CardDetailModalProps {
@@ -27,6 +28,8 @@ export const CardDetailModal: React.FC<CardDetailModalProps> = ({
   const [task, setTask] = useState<Task | null>(null);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
   const [commentBody, setCommentBody] = useState('');
   const [newSubtask, setNewSubtask] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -38,11 +41,20 @@ export const CardDetailModal: React.FC<CardDetailModalProps> = ({
   useEffect(() => {
     if (!taskId) return;
     setIsLoading(true);
-    getTask(taskId).then((res) => {
+    getTask(taskId).then(async (res) => {
       if (res.success && res.data) {
         setTask(res.data);
         setSubtasks(res.data.subtasks ?? []);
         setComments(res.data.comments ?? []);
+        // Fetch Epics & Stories for the project
+        if (res.data.projectId) {
+          const [epicsRes, storiesRes] = await Promise.all([
+            getEpics(res.data.projectId),
+            getStories(res.data.projectId),
+          ]);
+          if (epicsRes.success) setEpics(epicsRes.data ?? []);
+          if (storiesRes.success) setStories(storiesRes.data ?? []);
+        }
       }
     }).finally(() => setIsLoading(false));
   }, [taskId]);
@@ -83,6 +95,18 @@ export const CardDetailModal: React.FC<CardDetailModalProps> = ({
     const res = await updateTask(task.id, {
       version: task.version,
       status: status as Task['status'],
+    });
+    if (res.success && res.data) {
+      setTask(res.data);
+      upsertTask(res.data);
+    }
+  };
+
+  const handleStoryChange = async (storyId: string) => {
+    if (!task) return;
+    const res = await updateTask(task.id, {
+      version: task.version,
+      storyId: storyId || undefined,
     });
     if (res.success && res.data) {
       setTask(res.data);
@@ -309,6 +333,23 @@ export const CardDetailModal: React.FC<CardDetailModalProps> = ({
                 <option value="in_progress">In Progress</option>
                 <option value="in_review">In Review</option>
                 <option value="done">Done</option>
+              </select>
+            </MetaItem>
+
+            <MetaItem label="User Story" icon={<BookOpen size={13} />}>
+              <select
+                id="task-story-select"
+                className="input"
+                style={{ padding: '4px 8px', fontSize: 12 }}
+                value={task.storyId ?? ''}
+                onChange={(e) => handleStoryChange(e.target.value)}
+              >
+                <option value="">None</option>
+                {stories.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title} ({s.storyPoints} pts)
+                  </option>
+                ))}
               </select>
             </MetaItem>
 

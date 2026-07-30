@@ -12,13 +12,13 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Plus } from 'lucide-react';
-import { Task, BoardColumn as BoardColumnType, BOARD_COLUMNS, TaskStatus, OrgMember } from '../../types';
+import { Task, BoardColumn as BoardColumnType, BOARD_COLUMNS, TaskStatus, OrgMember, Epic, Story } from '../../types';
 import { useBoardStore } from '../../store/useBoardStore';
 import { Column } from './Column';
 import { CardDetailModal } from './CardDetailModal';
 import { TaskCard } from './TaskCard';
 import { Modal } from '../common/Modal';
-import { createTask } from '../../services/api';
+import { createTask, getEpics, getStories } from '../../services/api';
 
 interface BoardProps {
   projectId: string;
@@ -48,6 +48,19 @@ export const Board: React.FC<BoardProps> = ({
   const [createColumn, setCreateColumn] = useState<TaskStatus>('todo');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
+  const [epics, setEpics] = useState<Epic[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    Promise.all([getEpics(projectId), getStories(projectId)]).then(([eRes, sRes]) => {
+      if (eRes.success) setEpics(eRes.data ?? []);
+      if (sRes.success) setStories(sRes.data ?? []);
+    });
+  }, [projectId]);
+
+  const epicsMap = Object.fromEntries(epics.map((e) => [e.id, e]));
+  const storiesMap = Object.fromEntries(stories.map((s) => [s.id, s]));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -178,6 +191,8 @@ export const Board: React.FC<BoardProps> = ({
               tasks={getColumnTasks(col.id)}
               memberNames={memberNames}
               memberAvatars={memberAvatars}
+              epicsMap={epicsMap}
+              storiesMap={storiesMap}
               onTaskClick={(task) => setSelectedTaskId(task.id)}
               onAddTask={() => {
                 setCreateColumn(col.id);

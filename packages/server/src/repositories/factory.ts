@@ -9,6 +9,7 @@ import {
 import { FirebaseUserRepository } from './firebase/FirebaseUserRepository';
 import { FirebaseCommentRepository } from './firebase/FirebaseCommentRepository';
 import { FirebaseProjectRepository } from './firebase/FirebaseProjectRepository';
+import { FirebaseStoryRepository } from './firebase/FirebaseStoryRepository';
 import { MemoryRepositoryFactory } from './memory/MemoryRepositoryFactory';
 
 export class FirebaseRepositoryFactory implements IRepositoryFactory {
@@ -40,6 +41,10 @@ export class FirebaseRepositoryFactory implements IRepositoryFactory {
 
   getProjectRepository() {
     return new FirebaseProjectRepository(this.db);
+  }
+
+  getStoryRepository() {
+    return new FirebaseStoryRepository(this.db);
   }
 }
 

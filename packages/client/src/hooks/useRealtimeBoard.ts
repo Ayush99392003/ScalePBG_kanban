@@ -4,6 +4,8 @@ import { db } from '../firebase/config';
 import { useBoardStore } from '../store/useBoardStore';
 import { Task } from '../types';
 
+const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+
 /**
  * Subscribes to Firestore real-time updates for all tasks in a sprint.
  * Updates the board store on any remote change.
@@ -12,7 +14,7 @@ export function useRealtimeBoard(sprintId: string | null, taskIds: string[]) {
   const upsertTask = useBoardStore((s) => s.upsertTask);
 
   useEffect(() => {
-    if (!sprintId || taskIds.length === 0) return;
+    if (IS_MOCK || !sprintId || taskIds.length === 0) return;
 
     // Firestore 'in' has max 30 items per query — chunk if needed
     const chunkSize = 30;
@@ -62,7 +64,7 @@ export function useRealtimeTasks(projectId: string | null) {
   const removeTask = useBoardStore((s) => s.removeTask);
 
   useEffect(() => {
-    if (!projectId) return;
+    if (IS_MOCK || !projectId) return;
 
     const q = query(
       collection(db, 'tasks'),

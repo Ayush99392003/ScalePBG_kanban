@@ -8,11 +8,14 @@ import {
 import { MemoryUserRepository } from './MemoryUserRepository';
 import { MemoryCommentRepository } from './MemoryCommentRepository';
 import { MemoryProjectRepository } from './MemoryProjectRepository';
+import { MemoryStoryRepository } from './MemoryStoryRepository';
 import {
   User,
   Organization,
   OrgMember,
   Project,
+  Epic,
+  Story,
   Task,
   Sprint,
   SprintItem,
@@ -64,6 +67,50 @@ const seedProject: Project = {
   description: 'Pre-seeded project for feature testing.',
   createdAt: now,
 };
+
+const seedEpics: Epic[] = [
+  {
+    id: 'demo-epic-1',
+    projectId: DEMO_PROJECT_ID,
+    title: 'Core Platform Setup',
+    goal: 'Establish baseline application architecture and security',
+    color: '#3B82F6',
+    status: 'in_progress',
+    createdAt: now,
+  },
+  {
+    id: 'demo-epic-2',
+    projectId: DEMO_PROJECT_ID,
+    title: 'Agile Workflow & Board Features',
+    goal: 'Provide real-time board, backlog management, and sprint planning',
+    color: '#8B5CF6',
+    status: 'open',
+    createdAt: now,
+  },
+];
+
+const seedStories: Story[] = [
+  {
+    id: 'demo-story-1',
+    epicId: 'demo-epic-1',
+    projectId: DEMO_PROJECT_ID,
+    title: 'User Authentication & Workspaces',
+    description: 'Implement multi-tenant auth and org member role mapping',
+    storyPoints: 5,
+    priority: 'high',
+    createdAt: now,
+  },
+  {
+    id: 'demo-story-2',
+    epicId: 'demo-epic-2',
+    projectId: DEMO_PROJECT_ID,
+    title: 'Interactive Board & Card Drag-Drop',
+    description: 'Kanban view with real-time updates and WIP limits',
+    storyPoints: 8,
+    priority: 'urgent',
+    createdAt: now,
+  },
+];
 
 const seedTasks: Task[] = [
   {
@@ -185,6 +232,7 @@ export class MemoryRepositoryFactory implements IRepositoryFactory {
   private userRepo: MemoryUserRepository;
   private commentRepo: MemoryCommentRepository;
   private projectRepo: MemoryProjectRepository;
+  private storyRepo: MemoryStoryRepository;
 
   constructor() {
     // Build a shared tasks Map so both task and project repos see
@@ -213,8 +261,10 @@ export class MemoryRepositoryFactory implements IRepositoryFactory {
     this.commentRepo = new MemoryCommentRepository();
     this.projectRepo = new MemoryProjectRepository(
       sharedTasks,
-      [seedProject]
+      [seedProject],
+      seedEpics
     );
+    this.storyRepo = new MemoryStoryRepository(seedStories);
 
     console.log(
       '[Mock] In-memory repositories initialised with seed data.'
@@ -234,4 +284,5 @@ export class MemoryRepositoryFactory implements IRepositoryFactory {
   getUserRepository()          { return this.userRepo; }
   getCommentRepository()       { return this.commentRepo; }
   getProjectRepository()       { return this.projectRepo; }
+  getStoryRepository()         { return this.storyRepo; }
 }

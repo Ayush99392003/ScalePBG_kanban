@@ -16,6 +16,7 @@ import {
   UserRole,
   Project,
   Epic,
+  Story,
 } from '../types/index';
 
 // ── Task Repository ───────────────────────────────────────────────────────────
@@ -131,6 +132,17 @@ export interface IProjectRepository {
   getBacklog(projectId: string): Promise<Task[]>;
 }
 
+// ── Story Repository ──────────────────────────────────────────────────────────
+
+export interface IStoryRepository {
+  findById(id: string): Promise<Story | null>;
+  findByProject(projectId: string): Promise<Story[]>;
+  findByEpic(epicId: string): Promise<Story[]>;
+  create(input: Omit<Story, 'id' | 'createdAt'>): Promise<Story>;
+  update(id: string, changes: Partial<Story>): Promise<Story>;
+  delete(id: string): Promise<boolean>;
+}
+
 // ── Repository Factory ────────────────────────────────────────────────────────
 
 export interface IRepositoryFactory {
@@ -141,4 +153,5 @@ export interface IRepositoryFactory {
   getUserRepository(): IUserRepository;
   getCommentRepository(): ICommentRepository;
   getProjectRepository(): IProjectRepository;
+  getStoryRepository(): IStoryRepository;
 }

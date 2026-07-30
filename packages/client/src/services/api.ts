@@ -2,7 +2,7 @@ import axios from 'axios';
 import { auth } from '../firebase/config';
 import type {
   User, Organization, OrgMember, AccessRequest,
-  Project, Epic, Task, Subtask, Sprint, SprintItem,
+  Project, Epic, Story, Task, Subtask, Sprint, SprintItem,
   Comment, BurndownSnapshot, ApiResponse,
 } from '../types';
 
@@ -80,6 +80,23 @@ export const getEpics = (projectId: string): Promise<ApiResponse<Epic[]>> =>
 
 export const createEpic = (projectId: string, data: { title: string; goal?: string; color?: string }): Promise<ApiResponse<Epic>> =>
   apiClient.post(`/projects/${projectId}/epics`, data).then((r) => r.data);
+
+// ── Stories ───────────────────────────────────────────────────────────────────
+
+export const getStories = (projectId: string): Promise<ApiResponse<Story[]>> =>
+  apiClient.get(`/projects/${projectId}/stories`).then((r) => r.data);
+
+export const createStory = (data: {
+  projectId: string; epicId?: string; title: string; description?: string;
+  storyPoints?: number; priority?: string;
+}): Promise<ApiResponse<Story>> =>
+  apiClient.post('/stories', data).then((r) => r.data);
+
+export const updateStory = (storyId: string, data: Partial<Story>): Promise<ApiResponse<Story>> =>
+  apiClient.patch(`/stories/${storyId}`, data).then((r) => r.data);
+
+export const deleteStory = (storyId: string): Promise<ApiResponse<void>> =>
+  apiClient.delete(`/stories/${storyId}`).then((r) => r.data);
 
 // ── Sprints ───────────────────────────────────────────────────────────────────
 

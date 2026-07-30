@@ -8,6 +8,7 @@ import { buildAccessRequestRouter } from './routers/accessRequestRouter';
 import { buildProjectRouter } from './routers/projectRouter';
 import { buildSprintRouter } from './routers/sprintRouter';
 import { buildTaskRouter } from './routers/taskRouter';
+import { buildStoryRouter } from './routers/storyRouter';
 
 dotenv.config();
 
@@ -110,6 +111,15 @@ api.use(
     factory.getCommentRepository(),
     factory.getOrgRepository(),
     factory.getProjectRepository()
+  )
+);
+
+api.use(
+  '/',
+  buildStoryRouter(
+    factory.getStoryRepository(),
+    factory.getProjectRepository(),
+    factory.getOrgRepository()
   )
 );
 

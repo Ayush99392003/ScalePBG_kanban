@@ -84,8 +84,8 @@ const AuthRouter: React.FC = () => {
           // If user has orgs, set first one as active
           if (res.data.orgs.length > 0 && !activeOrgId) {
             const firstOrg = res.data.orgs[0];
-            // We need to find user's role in org — we'll use a simple call
-            setActiveOrg(firstOrg.id, 'member'); // temp role, sidebar will refresh
+            const isOwner = firstOrg.ownerId === res.data.user.id;
+            setActiveOrg(firstOrg.id, isOwner ? 'admin' : 'member');
           }
         }
       } catch {

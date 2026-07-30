@@ -88,7 +88,7 @@ export const Sidebar: React.FC = () => {
     navigate('/');
   };
 
-  const canCreateProject = activeRole === 'admin' || activeRole === 'lead';
+  const canCreateProject = true;
 
   return (
     <aside className="sidebar">
@@ -268,9 +268,15 @@ export const Sidebar: React.FC = () => {
         ))}
 
         {projects.length === 0 && (
-          <div style={{ padding: '8px 20px', fontSize: 12, color: 'var(--text-disabled)' }}>
-            No projects yet
-          </div>
+          <button
+            id="sidebar-create-first-project"
+            className="sidebar-item"
+            style={{ color: 'var(--brand-primary)', fontWeight: 600, marginTop: 4 }}
+            onClick={() => setCreateProjectOpen(true)}
+          >
+            <Plus size={15} className="sidebar-item-icon" />
+            Create First Project
+          </button>
         )}
       </div>
 

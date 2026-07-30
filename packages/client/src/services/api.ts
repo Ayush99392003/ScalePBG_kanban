@@ -7,11 +7,13 @@ import type {
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api/v1';
+const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 const apiClient = axios.create({ baseURL: BASE_URL });
 
-// Attach Firebase ID token to every request
+// Attach Firebase ID token to every request (skip in mock mode)
 apiClient.interceptors.request.use(async (config) => {
+  if (IS_MOCK) return config; // server bypasses auth in mock mode
   const user = auth.currentUser;
   if (user) {
     const token = await user.getIdToken();

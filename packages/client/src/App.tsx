@@ -13,6 +13,8 @@ import { SprintPage } from './pages/SprintPage';
 import { Sidebar } from './components/Sidebar';
 import './index.css';
 
+const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
@@ -42,6 +44,29 @@ const AuthRouter: React.FC = () => {
   } = useAuthStore();
 
   useEffect(() => {
+    // ── Mock mode: skip Firebase login, call server directly ──────
+    if (IS_MOCK) {
+      syncProfile()
+        .then((res) => {
+          if (res.success && res.data) {
+            setProfile(res.data.user, res.data.orgs);
+            // Inject a dummy firebaseUser so the app knows we're logged in
+            setFirebaseUser({
+              uid: res.data.user.id,
+              email: res.data.user.email,
+            });
+            if (res.data.orgs.length > 0) {
+              setActiveOrg(res.data.orgs[0].id, 'admin');
+            }
+          } else {
+            setLoading(false);
+          }
+        })
+        .catch(() => setLoading(false));
+      return;
+    }
+
+    // ── Normal Firebase auth ────────────────────────────────
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) {
         reset();

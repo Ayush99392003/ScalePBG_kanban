@@ -14,6 +14,8 @@ import {
   User,
   Comment,
   UserRole,
+  Project,
+  Epic,
 } from '../types/index';
 
 // ── Task Repository ───────────────────────────────────────────────────────────
@@ -113,6 +115,22 @@ export interface ICommentRepository {
   ): Promise<Comment>;
 }
 
+// ── Project Repository ────────────────────────────────────────────────────────
+
+export interface IProjectRepository {
+  findById(id: string): Promise<Project | null>;
+  findByOrg(orgId: string): Promise<Project[]>;
+  create(
+    input: Omit<Project, 'id' | 'createdAt'>
+  ): Promise<Project>;
+  keyExistsInOrg(orgId: string, key: string): Promise<boolean>;
+  getEpics(projectId: string): Promise<Epic[]>;
+  createEpic(
+    input: Omit<Epic, 'id' | 'createdAt'>
+  ): Promise<Epic>;
+  getBacklog(projectId: string): Promise<Task[]>;
+}
+
 // ── Repository Factory ────────────────────────────────────────────────────────
 
 export interface IRepositoryFactory {
@@ -122,4 +140,5 @@ export interface IRepositoryFactory {
   getAccessRequestRepository(): IAccessRequestRepository;
   getUserRepository(): IUserRepository;
   getCommentRepository(): ICommentRepository;
+  getProjectRepository(): IProjectRepository;
 }

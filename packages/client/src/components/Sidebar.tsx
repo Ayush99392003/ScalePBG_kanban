@@ -13,6 +13,8 @@ import { getOrgProjects, getAccessRequests, createProject } from '../services/ap
 import { Modal } from './common/Modal';
 import { Project } from '../types';
 
+const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+
 export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -76,6 +78,12 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleSignOut = async () => {
+    if (IS_MOCK) {
+      // In mock mode there's no real Firebase session — just reset state.
+      useAuthStore.getState().reset();
+      navigate('/');
+      return;
+    }
     await signOut(auth);
     navigate('/');
   };

@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initFirebaseAdmin } from './firebase/admin';
 import { createRepositoryFactory } from './repositories/factory';
 import { buildAuthRouter } from './routers/authRouter';
 import { buildOrgRouter } from './routers/orgRouter';
@@ -14,7 +13,17 @@ dotenv.config();
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-initFirebaseAdmin();
+const isMock = process.env.USE_MOCK === 'true';
+
+if (!isMock) {
+  // Only initialise Firebase Admin when using real Firestore
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { initFirebaseAdmin } = require('./firebase/admin') as {
+    initFirebaseAdmin: () => void;
+  };
+  initFirebaseAdmin();
+}
+
 const factory = createRepositoryFactory();
 
 const app = express();
@@ -32,7 +41,9 @@ app.use(express.json());
 // Request logging in development
 if (process.env.NODE_ENV !== 'production') {
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.path}`
+    );
     next();
   });
 }
@@ -40,7 +51,11 @@ if (process.env.NODE_ENV !== 'production') {
 // ── Health Check ──────────────────────────────────────────────────────────────
 
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    mode: isMock ? 'mock' : 'firebase',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ── API Routes ────────────────────────────────────────────────────────────────
@@ -71,15 +86,20 @@ api.use(
   )
 );
 
-// Project & epic routes (both /orgs/:orgId/projects and /projects/:projectId)
-const projectRouter = buildProjectRouter(factory.getOrgRepository());
+// Project & epic routes
+const projectRouter = buildProjectRouter(
+  factory.getOrgRepository(),
+  factory.getProjectRepository()
+);
 api.use('/', projectRouter);
 
 api.use(
   '/',
   buildSprintRouter(
     factory.getSprintRepository(),
-    factory.getOrgRepository()
+    factory.getOrgRepository(),
+    factory.getProjectRepository(),
+    factory.getTaskRepository()
   )
 );
 
@@ -88,7 +108,8 @@ api.use(
   buildTaskRouter(
     factory.getTaskRepository(),
     factory.getCommentRepository(),
-    factory.getOrgRepository()
+    factory.getOrgRepository(),
+    factory.getProjectRepository()
   )
 );
 
@@ -98,7 +119,8 @@ app.use('/api', api);
 // ── Global Error Handler ──────────────────────────────────────────────────────
 
 app.use(
-  (err: Error & { code?: number; errorCode?: string },
+  (
+    err: Error & { code?: number; errorCode?: string },
     _req: Request,
     res: Response,
     _next: NextFunction
@@ -122,7 +144,14 @@ app.use(
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 app.listen(PORT, () => {
   console.log(`[Server] Running on http://localhost:${PORT}`);
-  console.log(`[Server] API base: http://localhost:${PORT}/api/v1`);
+  console.log(
+    `[Server] API base: http://localhost:${PORT}/api/v1`
+  );
+  if (isMock) {
+    console.log(
+      '[Server] ⚠️  MOCK MODE — all data is in-memory only.'
+    );
+  }
 });
 
 export default app;

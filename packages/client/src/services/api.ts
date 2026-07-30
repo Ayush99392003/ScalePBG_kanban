@@ -158,22 +158,41 @@ export const createOrg = async (data: { name: string; slug: string }): Promise<A
 };
 
 export const searchOrgBySlug = async (slug: string): Promise<ApiResponse<Pick<Organization, 'id' | 'name' | 'slug'>>> => {
+  const normalizedSlug = slug.trim().toLowerCase();
   if (!shouldUseDirectFirestore()) {
     try {
-      const res = await apiClient.get('/orgs/search', { params: { slug } });
+      const res = await apiClient.get('/orgs/search', { params: { slug: normalizedSlug } });
       return res.data;
     } catch (err) {
       if (!isNetworkError(err)) throw err;
     }
   }
 
-  const q = query(collection(db, 'organizations'), where('slug', '==', slug));
+  const q = query(collection(db, 'organizations'), where('slug', '==', normalizedSlug));
   const snap = await getDocs(q);
   if (snap.empty) {
     return { success: false, error: { message: 'Organization not found.' } };
   }
   const d = snap.docs[0].data();
   return { success: true, data: { id: snap.docs[0].id, name: d.name, slug: d.slug } };
+};
+
+export const getAllPublicOrgs = async (): Promise<ApiResponse<Pick<Organization, 'id' | 'name' | 'slug'>[]>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get('/orgs');
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const snap = await getDocs(collection(db, 'organizations'));
+  const orgs = snap.docs.map((d) => {
+    const data = d.data();
+    return { id: d.id, name: data.name, slug: data.slug };
+  });
+  return { success: true, data: orgs };
 };
 
 export const getOrg = (orgId: string): Promise<ApiResponse<Organization>> =>

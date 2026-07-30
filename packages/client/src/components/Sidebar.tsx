@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Layers, LayoutGrid, Inbox, Zap, Settings, LogOut,
-  ChevronDown, Plus, BarChart2, UserPlus, Rocket,
+  ChevronDown, Plus, BarChart2, UserPlus, Rocket, Building2,
 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase/config';
@@ -29,7 +29,7 @@ export const Sidebar: React.FC = () => {
   const setActiveProject = useWorkspaceStore((s) => s.setActiveProject);
 
   const [pendingCount, setPendingCount] = useState(0);
-  const [orgExpanded, setOrgExpanded] = useState(true);
+  const [orgExpanded, setOrgExpanded] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectKey, setNewProjectKey] = useState('');
@@ -102,8 +102,9 @@ export const Sidebar: React.FC = () => {
 
       {/* Org switcher */}
       {orgs.length > 0 && (
-        <div style={{ padding: '12px 12px 4px' }}>
+        <div style={{ padding: '12px 12px 4px', position: 'relative' }}>
           <div
+            id="sidebar-org-switcher"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -151,6 +152,66 @@ export const Sidebar: React.FC = () => {
               }}
             />
           </div>
+
+          {/* Expanded Org Menu */}
+          {orgExpanded && (
+            <div
+              style={{
+                marginTop: 6,
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                padding: 4,
+                boxShadow: 'var(--shadow-md)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              {orgs.map((org) => (
+                <button
+                  key={org.id}
+                  className={`btn btn-ghost ${activeOrgId === org.id ? 'active' : ''}`}
+                  style={{
+                    justifyContent: 'flex-start',
+                    fontSize: 12,
+                    padding: '6px 8px',
+                    fontWeight: activeOrgId === org.id ? 600 : 400,
+                    width: '100%',
+                    textAlign: 'left',
+                  }}
+                  onClick={() => {
+                    const isOwner = org.ownerId === user?.id;
+                    setActiveOrg(org.id, isOwner ? 'admin' : 'member');
+                    setOrgExpanded(false);
+                  }}
+                >
+                  <Building2 size={13} style={{ flexShrink: 0, opacity: 0.7 }} />
+                  <span className="truncate" style={{ flex: 1 }}>{org.name}</span>
+                </button>
+              ))}
+              <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '4px 0' }} />
+              <button
+                id="sidebar-join-create-org"
+                className="btn btn-ghost"
+                style={{
+                  justifyContent: 'flex-start',
+                  fontSize: 11,
+                  padding: '6px 8px',
+                  color: 'var(--brand-primary)',
+                  fontWeight: 600,
+                  width: '100%',
+                }}
+                onClick={() => {
+                  setOrgExpanded(false);
+                  navigate('/onboarding');
+                }}
+              >
+                <Plus size={13} />
+                Create or Search Org
+              </button>
+            </div>
+          )}
         </div>
       )}
 

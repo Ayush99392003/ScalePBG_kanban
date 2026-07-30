@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createOrg, searchOrgBySlug, createAccessRequest } from '../services/api';
+import { auth } from '../firebase/config';
 import { useAuthStore } from '../store/useAuthStore';
 import { Organization } from '../types';
 import { Building2, Search, Plus, ArrowRight, Clock } from 'lucide-react';
@@ -41,7 +42,22 @@ export const OnboardingPage: React.FC = () => {
         return;
       }
       const newOrg = res.data!;
-      setProfile(user!, [...orgs, newOrg]);
+      const fbUser = auth.currentUser;
+      const currentUser = user ?? (fbUser ? {
+        id: fbUser.uid,
+        email: fbUser.email ?? '',
+        name: fbUser.displayName ?? fbUser.email?.split('@')[0] ?? 'User',
+        avatarUrl: fbUser.photoURL ?? undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } : {
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'User',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      setProfile(currentUser, [...orgs, newOrg]);
       setActiveOrg(newOrg.id, 'admin');
     } catch {
       setError('Failed to create organization. Please try again.');

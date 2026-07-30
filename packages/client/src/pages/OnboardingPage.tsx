@@ -188,7 +188,7 @@ export const OnboardingPage: React.FC = () => {
                 value={orgSlug}
                 onChange={(e) => setOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                 required
-                pattern="[a-z0-9-]+"
+                pattern="[a-z0-9\-]+"
               />
               <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                 Others will search for your org using this slug.

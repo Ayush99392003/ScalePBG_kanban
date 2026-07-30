@@ -84,6 +84,13 @@ service cloud.firestore {
       allow write: if isAuthenticated();
     }
 
+    // ── Subtasks ──────────────────────────────────────────────────────────
+
+    match /subtasks/{subtaskId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
     // ── Activity Logs ─────────────────────────────────────────────────────
 
     match /activity_logs/{logId} {

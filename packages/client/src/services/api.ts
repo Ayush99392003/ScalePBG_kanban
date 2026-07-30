@@ -14,9 +14,8 @@ const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 const apiClient = axios.create({ baseURL: BASE_URL });
 
-// Attach Firebase ID token to every request (skip in mock mode)
 apiClient.interceptors.request.use(async (config) => {
-  if (IS_MOCK) return config; // server bypasses auth in mock mode
+  if (IS_MOCK) return config;
   const user = auth.currentUser;
   if (user) {
     const token = await user.getIdToken();
@@ -25,18 +24,12 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-/** Helper to check if we should use direct Client Firestore (e.g. deployed site where API is localhost) */
+/** Direct Cloud Firestore mode is active unless mock mode is explicitly enabled */
 function shouldUseDirectFirestore(): boolean {
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const isHosted = hostname !== 'localhost' && hostname !== '127.0.0.1';
-    const isLocalApi = BASE_URL.includes('localhost') || BASE_URL.includes('127.0.0.1');
-    if (isHosted && isLocalApi) return true;
-  }
-  return false;
+  if (IS_MOCK) return false;
+  return true;
 }
 
-/** Helper to check if an error is a network connection failure (server down) */
 function isNetworkError(err: unknown): boolean {
   if (axios.isAxiosError(err)) {
     return err.code === 'ERR_NETWORK' || !err.response;
@@ -44,7 +37,6 @@ function isNetworkError(err: unknown): boolean {
   return false;
 }
 
-/** Removes undefined fields from an object so Firestore setDoc/updateDoc never throws Unsupported field value: undefined */
 function cleanForFirestore<T extends Record<string, any>>(obj: T): T {
   const clean: Record<string, any> = {};
   for (const [key, val] of Object.entries(obj)) {
@@ -124,14 +116,12 @@ export const createOrg = async (data: { name: string; slug: string }): Promise<A
     const fbUser = auth.currentUser;
     const now = new Date().toISOString();
     
-    // Check slug uniqueness
     const slugQuery = query(collection(db, 'organizations'), where('slug', '==', data.slug));
     const slugSnap = await getDocs(slugQuery);
     if (!slugSnap.empty) {
       return { success: false, error: { message: 'Organization slug already taken.' } };
     }
 
-    // Create Org doc
     const orgRef = doc(collection(db, 'organizations'));
     const newOrg: Organization = {
       id: orgRef.id,
@@ -142,7 +132,6 @@ export const createOrg = async (data: { name: string; slug: string }): Promise<A
     };
     await setDoc(orgRef, cleanForFirestore(newOrg));
 
-    // Add owner as admin member
     const memberRef = doc(db, 'organizations', orgRef.id, 'members', fbUser.uid);
     await setDoc(memberRef, cleanForFirestore({
       uid: fbUser.uid,
@@ -195,8 +184,21 @@ export const getAllPublicOrgs = async (): Promise<ApiResponse<Pick<Organization,
   return { success: true, data: orgs };
 };
 
-export const getOrg = (orgId: string): Promise<ApiResponse<Organization>> =>
-  apiClient.get(`/orgs/${orgId}`).then((r) => r.data);
+export const getOrg = async (orgId: string): Promise<ApiResponse<Organization>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get(`/orgs/${orgId}`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const snap = await getDoc(doc(db, 'organizations', orgId));
+  if (!snap.exists()) return { success: false, error: { message: 'Organization not found' } };
+  const d = snap.data();
+  return { success: true, data: { id: snap.id, name: d.name, slug: d.slug, ownerId: d.ownerId, createdAt: d.createdAt } };
+};
 
 export const getOrgMembers = async (orgId: string): Promise<ApiResponse<OrgMember[]>> => {
   if (!shouldUseDirectFirestore()) {
@@ -272,8 +274,6 @@ export const getAccessRequests = async (orgId: string, status?: string): Promise
   return { success: true, data: requests };
 };
 
-// ── Access Requests ───────────────────────────────────────────────────────────
-
 export const createAccessRequest = async (orgId: string): Promise<ApiResponse<AccessRequest>> => {
   if (!shouldUseDirectFirestore()) {
     try {
@@ -304,8 +304,25 @@ export const createAccessRequest = async (orgId: string): Promise<ApiResponse<Ac
   return { success: false, error: { message: 'Not authenticated' } };
 };
 
-export const getMyAccessRequests = (): Promise<ApiResponse<AccessRequest[]>> =>
-  apiClient.get('/access-requests/my').then((r) => r.data);
+export const getMyAccessRequests = async (): Promise<ApiResponse<AccessRequest[]>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get('/access-requests/my');
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  if (!auth.currentUser) return { success: true, data: [] };
+  const q = query(collection(db, 'access_requests'), where('userId', '==', auth.currentUser.uid));
+  const snap = await getDocs(q);
+  const requests: AccessRequest[] = snap.docs.map((d) => ({
+    id: d.id,
+    ...d.data(),
+  }) as AccessRequest);
+  return { success: true, data: requests };
+};
 
 export const reviewAccessRequest = async (requestId: string, status: 'approved' | 'rejected'): Promise<ApiResponse<AccessRequest>> => {
   if (!shouldUseDirectFirestore()) {
@@ -387,8 +404,20 @@ export const createProject = async (orgId: string, data: { name: string; key: st
   return { success: true, data: newProj };
 };
 
-export const getProject = (projectId: string): Promise<ApiResponse<Project>> =>
-  apiClient.get(`/projects/${projectId}`).then((r) => r.data);
+export const getProject = async (projectId: string): Promise<ApiResponse<Project>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get(`/projects/${projectId}`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const snap = await getDoc(doc(db, 'projects', projectId));
+  if (!snap.exists()) return { success: false, error: { message: 'Project not found' } };
+  return { success: true, data: { id: snap.id, ...snap.data() } as Project };
+};
 
 export const getBacklog = async (projectId: string): Promise<ApiResponse<Task[]>> => {
   if (!shouldUseDirectFirestore()) {
@@ -538,11 +567,35 @@ export const createStory = async (data: {
   return { success: true, data: newStory };
 };
 
-export const updateStory = (storyId: string, data: Partial<Story>): Promise<ApiResponse<Story>> =>
-  apiClient.patch(`/stories/${storyId}`, data).then((r) => r.data);
+export const updateStory = async (storyId: string, data: Partial<Story>): Promise<ApiResponse<Story>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.patch(`/stories/${storyId}`, data);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
 
-export const deleteStory = (storyId: string): Promise<ApiResponse<void>> =>
-  apiClient.delete(`/stories/${storyId}`).then((r) => r.data);
+  const storyRef = doc(db, 'stories', storyId);
+  await updateDoc(storyRef, cleanForFirestore(data));
+  const snap = await getDoc(storyRef);
+  return { success: true, data: { id: snap.id, ...snap.data() } as Story };
+};
+
+export const deleteStory = async (storyId: string): Promise<ApiResponse<void>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.delete(`/stories/${storyId}`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  await deleteDoc(doc(db, 'stories', storyId));
+  return { success: true, data: undefined };
+};
 
 // ── Sprints ───────────────────────────────────────────────────────────────────
 
@@ -600,11 +653,36 @@ export const createSprint = async (projectId: string, data: { name: string; goal
   return { success: true, data: newSprint };
 };
 
-export const getSprint = (sprintId: string): Promise<ApiResponse<Sprint>> =>
-  apiClient.get(`/sprints/${sprintId}`).then((r) => r.data);
+export const getSprint = async (sprintId: string): Promise<ApiResponse<Sprint>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get(`/sprints/${sprintId}`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
 
-export const updateSprintStatus = (sprintId: string, status: string): Promise<ApiResponse<Sprint>> =>
-  apiClient.patch(`/sprints/${sprintId}/status`, { status }).then((r) => r.data);
+  const snap = await getDoc(doc(db, 'sprints', sprintId));
+  if (!snap.exists()) return { success: false, error: { message: 'Sprint not found' } };
+  return { success: true, data: { id: snap.id, ...snap.data() } as Sprint };
+};
+
+export const updateSprintStatus = async (sprintId: string, status: string): Promise<ApiResponse<Sprint>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.patch(`/sprints/${sprintId}/status`, { status });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const spRef = doc(db, 'sprints', sprintId);
+  await updateDoc(spRef, { status });
+  const snap = await getDoc(spRef);
+  return { success: true, data: { id: snap.id, ...snap.data() } as Sprint };
+};
 
 export const getSprintBoard = async (sprintId: string): Promise<ApiResponse<{ items: SprintItem[]; tasks: Record<string, Task> }>> => {
   if (!shouldUseDirectFirestore()) {
@@ -690,8 +768,18 @@ export const removeSprintItem = async (sprintId: string, taskId: string): Promis
   return { success: true, data: { removed: true } };
 };
 
-export const getBurndown = (sprintId: string): Promise<ApiResponse<BurndownSnapshot[]>> =>
-  apiClient.get(`/sprints/${sprintId}/burndown`).then((r) => r.data);
+export const getBurndown = async (sprintId: string): Promise<ApiResponse<BurndownSnapshot[]>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get(`/sprints/${sprintId}/burndown`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  return { success: true, data: [] };
+};
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
@@ -730,8 +818,29 @@ export const createTask = async (data: {
   return { success: true, data: newTask };
 };
 
-export const getTask = (taskId: string): Promise<ApiResponse<Task & { subtasks: Subtask[]; comments: Comment[] }>> =>
-  apiClient.get(`/tasks/${taskId}`).then((r) => r.data);
+export const getTask = async (taskId: string): Promise<ApiResponse<Task & { subtasks: Subtask[]; comments: Comment[] }>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.get(`/tasks/${taskId}`);
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const taskDoc = await getDoc(doc(db, 'tasks', taskId));
+  if (!taskDoc.exists()) return { success: false, error: { message: 'Task not found' } };
+
+  const taskData = { id: taskDoc.id, ...taskDoc.data() } as Task;
+
+  const subSnap = await getDocs(query(collection(db, 'subtasks'), where('taskId', '==', taskId)));
+  const subtasks: Subtask[] = subSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Subtask));
+
+  const comSnap = await getDocs(query(collection(db, 'comments'), where('taskId', '==', taskId)));
+  const comments: Comment[] = comSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Comment));
+
+  return { success: true, data: { ...taskData, subtasks, comments } };
+};
 
 export const getTasks = async (projectId: string, filter?: { status?: string; assigneeId?: string }): Promise<ApiResponse<Task[]>> => {
   if (!shouldUseDirectFirestore()) {
@@ -802,11 +911,64 @@ export const deleteTask = async (taskId: string): Promise<ApiResponse<void>> => 
   return { success: true, data: undefined };
 };
 
-export const addComment = (taskId: string, body: string): Promise<ApiResponse<Comment>> =>
-  apiClient.post(`/tasks/${taskId}/comments`, { body }).then((r) => r.data);
+export const addComment = async (taskId: string, body: string): Promise<ApiResponse<Comment>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.post(`/tasks/${taskId}/comments`, { body });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
 
-export const addSubtask = (taskId: string, title: string): Promise<ApiResponse<Subtask>> =>
-  apiClient.post(`/tasks/${taskId}/subtasks`, { title }).then((r) => r.data);
+  const cRef = doc(collection(db, 'comments'));
+  const now = new Date().toISOString();
+  const newComment: Comment = {
+    id: cRef.id,
+    entityType: 'task',
+    entityId: taskId,
+    userId: auth.currentUser?.uid ?? 'unknown',
+    body,
+    createdAt: now,
+  };
+  await setDoc(cRef, cleanForFirestore(newComment));
+  return { success: true, data: newComment };
+};
 
-export const toggleSubtask = (subtaskId: string, isDone: boolean): Promise<ApiResponse<Subtask>> =>
-  apiClient.patch(`/tasks/subtasks/${subtaskId}/toggle`, { isDone }).then((r) => r.data);
+export const addSubtask = async (taskId: string, title: string): Promise<ApiResponse<Subtask>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.post(`/tasks/${taskId}/subtasks`, { title });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const subRef = doc(collection(db, 'subtasks'));
+  const newSub: Subtask = {
+    id: subRef.id,
+    taskId,
+    title,
+    isDone: false,
+    orderIndex: 0,
+  };
+  await setDoc(subRef, cleanForFirestore(newSub));
+  return { success: true, data: newSub };
+};
+
+export const toggleSubtask = async (subtaskId: string, isDone: boolean): Promise<ApiResponse<Subtask>> => {
+  if (!shouldUseDirectFirestore()) {
+    try {
+      const res = await apiClient.patch(`/tasks/subtasks/${subtaskId}/toggle`, { isDone });
+      return res.data;
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+    }
+  }
+
+  const subRef = doc(db, 'subtasks', subtaskId);
+  await updateDoc(subRef, { isDone });
+  const snap = await getDoc(subRef);
+  return { success: true, data: { id: snap.id, ...snap.data() } as Subtask };
+};

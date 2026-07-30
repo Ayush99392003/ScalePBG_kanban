@@ -14,6 +14,7 @@ import { arrayMove } from '@dnd-kit/sortable';
 import { Plus } from 'lucide-react';
 import { Task, BoardColumn as BoardColumnType, BOARD_COLUMNS, TaskStatus, OrgMember, Epic, Story, TaskPriority } from '../../types';
 import { useBoardStore } from '../../store/useBoardStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { Column } from './Column';
 import { CardDetailModal } from './CardDetailModal';
 import { TaskCard } from './TaskCard';
@@ -69,10 +70,17 @@ export const Board: React.FC<BoardProps> = ({
   const memberNames = Object.fromEntries(members.map((m) => [m.uid, m.name ?? m.email ?? m.uid]));
   const memberAvatars = Object.fromEntries(members.map((m) => [m.uid, m.avatarUrl ?? '']));
 
+  const activeRole = useAuthStore((s) => s.activeRole);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'my-tasks'>(viewFilter);
+
+  useEffect(() => {
+    setActiveFilter(viewFilter);
+  }, [viewFilter]);
+
   // Filter tasks
   const allTasks = Object.values(tasks).filter((t) => t.projectId === projectId);
   const filteredTasks =
-    viewFilter === 'my-tasks' && currentUserId
+    activeFilter === 'my-tasks' && currentUserId
       ? allTasks.filter((t) => t.assigneeId === currentUserId)
       : allTasks;
 
@@ -155,10 +163,44 @@ export const Board: React.FC<BoardProps> = ({
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-          {filteredTasks.length} tasks
-          {viewFilter === 'my-tasks' && ' (yours)'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+            {filteredTasks.length} tasks
+          </span>
+          <div style={{ display: 'flex', background: 'var(--bg-glass)', borderRadius: 'var(--radius-md)', padding: 2, border: '1px solid var(--border-subtle)' }}>
+            <button
+              id="filter-all-tasks"
+              className={`btn btn-ghost btn-sm ${activeFilter === 'all' ? 'active' : ''}`}
+              style={{ fontSize: 11, padding: '3px 10px', fontWeight: activeFilter === 'all' ? 700 : 400 }}
+              onClick={() => setActiveFilter('all')}
+            >
+              All Tasks
+            </button>
+            <button
+              id="filter-my-tasks"
+              className={`btn btn-ghost btn-sm ${activeFilter === 'my-tasks' ? 'active' : ''}`}
+              style={{ fontSize: 11, padding: '3px 10px', fontWeight: activeFilter === 'my-tasks' ? 700 : 400 }}
+              onClick={() => setActiveFilter('my-tasks')}
+            >
+              My Tasks
+            </button>
+          </div>
+          <span
+            className="badge"
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              background: activeRole === 'admin' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+              color: activeRole === 'admin' ? 'var(--brand-primary)' : 'var(--accent-emerald)',
+              padding: '2px 8px',
+              borderRadius: 'var(--radius-full)',
+            }}
+          >
+            Role: {activeRole}
+          </span>
+        </div>
         <button
           id="board-add-task"
           className="btn btn-primary btn-sm"

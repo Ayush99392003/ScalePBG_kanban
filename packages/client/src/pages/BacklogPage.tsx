@@ -18,7 +18,7 @@ type SortKey = 'priority' | 'created' | 'estimate';
 type FilterStatus = 'all' | TaskStatus;
 
 const PRIORITY_ORDER: Record<TaskPriority, number> = {
-  urgent: 0, high: 1, medium: 2, low: 3,
+  urgent: 0, high: 1, medium: 2, low: 3, lowest: 4,
 };
 
 export const BacklogPage: React.FC = () => {
@@ -533,10 +533,11 @@ export const BacklogPage: React.FC = () => {
                 value={newPriority}
                 onChange={(e) => setNewPriority(e.target.value as TaskPriority)}
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
+                <option value="lowest">🔵 Lowest</option>
+                <option value="low">🟢 Low</option>
+                <option value="medium">🟡 Medium</option>
+                <option value="high">🟠 High</option>
+                <option value="urgent">🔴 Urgent</option>
               </select>
             </div>
             <div className="input-group">

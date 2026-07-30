@@ -6,6 +6,12 @@ import { Task } from '../types';
 
 const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
+function parseDate(val: any): string {
+  if (typeof val === 'string' && val.length > 0) return val;
+  if (val?.toDate) return val.toDate().toISOString();
+  return new Date().toISOString();
+}
+
 /**
  * Subscribes to Firestore real-time updates for all tasks in a sprint.
  * Updates the board store on any remote change.
@@ -44,8 +50,8 @@ export function useRealtimeBoard(sprintId: string | null, taskIds: string[]) {
             status: data.status ?? 'backlog',
             labelIds: data.labelIds ?? [],
             version: data.version ?? 1,
-            createdAt: data.createdAt?.toDate?.()?.toISOString() ?? '',
-            updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? '',
+            createdAt: parseDate(data.createdAt),
+            updatedAt: parseDate(data.updatedAt),
           } as Task);
         });
       });
@@ -90,8 +96,8 @@ export function useRealtimeTasks(projectId: string | null) {
           status: data.status ?? 'backlog',
           labelIds: data.labelIds ?? [],
           version: data.version ?? 1,
-          createdAt: data.createdAt?.toDate?.()?.toISOString() ?? '',
-          updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? '',
+          createdAt: parseDate(data.createdAt),
+          updatedAt: parseDate(data.updatedAt),
         } as Task);
       });
     });

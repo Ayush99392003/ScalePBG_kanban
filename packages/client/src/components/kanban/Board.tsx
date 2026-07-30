@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { Plus } from 'lucide-react';
-import { Task, BoardColumn as BoardColumnType, BOARD_COLUMNS, TaskStatus, OrgMember, Epic, Story } from '../../types';
+import { Task, BoardColumn as BoardColumnType, BOARD_COLUMNS, TaskStatus, OrgMember, Epic, Story, TaskPriority } from '../../types';
 import { useBoardStore } from '../../store/useBoardStore';
 import { Column } from './Column';
 import { CardDetailModal } from './CardDetailModal';
@@ -116,6 +116,9 @@ export const Board: React.FC<BoardProps> = ({
     }
   };
 
+  const [newTaskAssignee, setNewTaskAssignee] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium');
+
   const handleCreateTask = async () => {
     if (!newTaskTitle.trim()) return;
     setCreateLoading(true);
@@ -124,10 +127,14 @@ export const Board: React.FC<BoardProps> = ({
         projectId,
         title: newTaskTitle.trim(),
         status: createColumn,
+        assigneeId: newTaskAssignee || undefined,
+        priority: newTaskPriority,
       });
       if (res.success && res.data) {
         upsertTask(res.data);
         setNewTaskTitle('');
+        setNewTaskAssignee('');
+        setNewTaskPriority('medium');
         setCreateModalOpen(false);
       }
     } finally {
@@ -243,30 +250,65 @@ export const Board: React.FC<BoardProps> = ({
           </>
         }
       >
-        <div className="input-group">
-          <label className="input-label">Task Title</label>
-          <input
-            id="new-task-title"
-            className="input"
-            placeholder="What needs to be done?"
-            value={newTaskTitle}
-            onChange={(e) => setNewTaskTitle(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreateTask()}
-            autoFocus
-          />
-        </div>
-        <div className="input-group" style={{ marginTop: 12 }}>
-          <label className="input-label">Starting Column</label>
-          <select
-            id="new-task-column"
-            className="input"
-            value={createColumn}
-            onChange={(e) => setCreateColumn(e.target.value as TaskStatus)}
-          >
-            {BOARD_COLUMNS.map((c) => (
-              <option key={c.id} value={c.id}>{c.title}</option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="input-group">
+            <label className="input-label">Task Title</label>
+            <input
+              id="new-task-title"
+              className="input"
+              placeholder="What needs to be done?"
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateTask()}
+              autoFocus
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="input-group">
+              <label className="input-label">Starting Column</label>
+              <select
+                id="new-task-column"
+                className="input"
+                value={createColumn}
+                onChange={(e) => setCreateColumn(e.target.value as TaskStatus)}
+              >
+                {BOARD_COLUMNS.map((c) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Priority (5 Levels)</label>
+              <select
+                id="new-task-priority"
+                className="input"
+                value={newTaskPriority}
+                onChange={(e) => setNewTaskPriority(e.target.value as TaskPriority)}
+              >
+                <option value="lowest">🔵 Lowest</option>
+                <option value="low">🟢 Low</option>
+                <option value="medium">🟡 Medium</option>
+                <option value="high">🟠 High</option>
+                <option value="urgent">🔴 Urgent</option>
+              </select>
+            </div>
+          </div>
+          <div className="input-group">
+            <label className="input-label">Assignee</label>
+            <select
+              id="new-task-assignee"
+              className="input"
+              value={newTaskAssignee}
+              onChange={(e) => setNewTaskAssignee(e.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.uid} value={m.uid}>
+                  {m.name ?? m.email ?? m.uid}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </Modal>
     </div>
